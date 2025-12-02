@@ -1,0 +1,4 @@
+# Ignore large/raw data and Python artifacts
+Data/
+__pycache__/
+*.pyc
