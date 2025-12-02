@@ -336,20 +336,6 @@ def _build_full_dataset() -> Tuple[pd.DataFrame, List[str]]:
     df["title_fight"] = df["title_fight"].astype(float)
     df["num_rounds"] = df["num_rounds"].astype(float)
 
-    # Optional enrichment from golden file: pre-built differential aggregates.
-    golden_path = DATA_DIR / "UFC_full_data_golden.csv"
-    def _golden_filter(col: str) -> bool:
-        if col == "fight_url":
-            return True
-        if not col.startswith("diff_") or "_r" in col:
-            return False
-        keep_targets = ("_3", "_5")
-        return col in {"diff_age", "diff_fight_number", "diff_odds"} or any(k in col for k in keep_targets)
-
-    golden = pd.read_csv(golden_path, usecols=_golden_filter)
-    df = df.merge(golden, on="fight_url", how="left")
-    golden_cols = [c for c in df.columns if c.startswith("diff_") and "_r" not in c]
-
     stance_encoder = _build_stance_encoder(df)
 
     long_df = build_long_fighter_rows(df, stance_encoder)
@@ -385,29 +371,7 @@ def _build_full_dataset() -> Tuple[pd.DataFrame, List[str]]:
 
     df = compute_elo(df)
     wide = assemble_fight_level_features(df, long_df, fighter_cols)
-    wide = wide.merge(df[["fight_id"] + golden_cols], on="fight_id", how="left")
     wide = wide.merge(df[["fight_id", "result", "finish_round"]], on="fight_id", how="left")
-
-    stat_cols = [
-        "fighter_SlpM",
-        "fighter_SApM",
-        "fighter_Str_Acc",
-        "fighter_Str_Def",
-        "fighter_TD_Avg",
-        "fighter_TD_Acc",
-        "fighter_TD_Def",
-        "fighter_Sub_Avg",
-        "fighter_w",
-        "fighter_l",
-        "fighter_nc_dq",
-    ]
-    extra = pd.DataFrame({"fight_id": df["fight_id"]})
-    for col in stat_cols:
-        c1, c2 = f"f_1_{col}", f"f_2_{col}"
-        extra[f"f1_{col}"] = df[c1]
-        extra[f"f2_{col}"] = df[c2]
-        extra[f"diff_{col}"] = df[c1] - df[c2]
-    wide = wide.merge(extra, on="fight_id", how="left")
 
     # Select numeric feature columns (drop identifiers and label).
     drop_cols = {"fight_id", "event_date", "label", "weight_class", "gender", "result", "finish_round"}
