@@ -179,10 +179,11 @@ def build_long_fighter_rows(df: pd.DataFrame, stance_encoder: Dict[str, int]) ->
             "sig_rate_against": sig_abs / duration_min,
             "sig_diff_pm": (sig_landed - sig_abs) / duration_min,
             "strike_diff_pm": (total_landed - total_abs) / duration_min,
-                "sig_acc": sig_acc,
-                "total_acc": total_acc,
-                "td_rate_for": td_succ / duration_min,
-                "td_rate_against": td_allowed / duration_min,
+            "margin_pm": (total_landed - total_abs) / duration_min,
+            "sig_acc": sig_acc,
+            "total_acc": total_acc,
+            "td_rate_for": td_succ / duration_min,
+            "td_rate_against": td_allowed / duration_min,
                 "td_acc": td_acc,
                 "td_def": td_def,
             "control_share": ctrl_share,
@@ -213,6 +214,7 @@ def add_rolling_features(long_df: pd.DataFrame) -> pd.DataFrame:
         "finish_against",
         "sig_diff_pm",
         "strike_diff_pm",
+        "margin_pm",
         "sig_acc",
         "total_acc",
         "td_acc",
@@ -243,6 +245,9 @@ def add_rolling_features(long_df: pd.DataFrame) -> pd.DataFrame:
             for w in windows:
                 group[f"{col}_ma_{w}"] = shifted.rolling(w, min_periods=1).mean()
             group[f"{col}_mean_all"] = shifted.expanding().mean()
+        # rolling margin signals
+        group["margin_pm_ma_3"] = group["margin_pm"].shift().rolling(3, min_periods=1).mean()
+        group["margin_pm_ma_5"] = group["margin_pm"].shift().rolling(5, min_periods=1).mean()
         return group
 
     return long_df.groupby("fighter", group_keys=False).apply(_per_fighter)
@@ -333,6 +338,8 @@ def prepare_dataset() -> Tuple[pd.DataFrame, pd.Series, pd.DataFrame, pd.Series,
         "sig_rate_against_ma_5",
         "td_rate_for_ma_5",
         "td_rate_against_ma_5",
+        "margin_pm_ma_3",
+        "margin_pm_ma_5",
         "height_cm",
         "reach_cm",
         "weight_lbs",
@@ -365,14 +372,14 @@ def train_model(X_train: pd.DataFrame, y_train: pd.Series):
     if XGBClassifier is None:
         raise ImportError("xgboost required")
     model = XGBClassifier(
-        n_estimators=1000,
-        learning_rate=0.04,
+        n_estimators=1200,
+        learning_rate=0.035,
         max_depth=4,
         subsample=0.9,
         colsample_bytree=0.8,
         eval_metric="logloss",
         tree_method="hist",
-        reg_lambda=1.1,
+        reg_lambda=1.2,
         gamma=0.05,
     )
     pipeline = make_pipeline(SimpleImputer(strategy="median"), model)
