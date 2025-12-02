@@ -7,9 +7,10 @@ End-to-end UFC fight prediction and prop models built from raw fight data plus o
 - Optional enriched odds: `UFC_betting_odds_enriched.csv` produced by `fetch_and_fill_odds.py` (uses The Odds API v4, sport `mma_mixed_martial_arts`).
 
 ## Core scripts
-- `train_fightiq_model.py`: Main winner model. Features include fighter rolling stats, Elo, odds/logit, official UFC pre-fight stats, selected golden diff_* aggregates. Uses enriched odds if present. Current hold-out (2024/25) accuracy: **0.7218** (2024: 0.7661, 2025: 0.6650).
-- `run_model_checks.py`: Leakage/robustness suite (feature-name scan, high-corr check, monkey tests, walk-forward accuracy). Current output mirrors the above accuracy; no leakage flags.
-- `prop_bet_models.py`: Baselines for Method, Round, Trifecta in addition to Winner. Hold-out accuracies (2024/25): Winner 0.7043; Method 0.5279; Round 0.5794; Trifecta 0.3614.
+- `train_fightiq_model.py`: Leak-free winner model (rolling stats + Elo + odds). Current hold-out (2024/25) accuracy: **0.6418** (2024: 0.6511, 2025: 0.6300).
+- `train_fightiq_model_golden.py`: Rebuild using per-fight stats from the golden file with enhanced Elo (margin/recency) and chin-health rollups (KD absorbed, finishes suffered); no static career stats. Hold-out (2024/25) accuracy: **0.6561** (2024: 0.6647, 2025: 0.6450).
+- `run_model_checks.py`: Leakage/robustness suite (feature-name scan, high-corr check, monkey tests, walk-forward accuracy).
+- `prop_bet_models.py`: Prop baselines (Winner, Method, Round, Trifecta) on leak-free features. Hold-out (2024/25): Winner 0.6550; Method 0.5345; Round 0.5849; Trifecta 0.3308.
 - `fetch_and_fill_odds.py`: Pulls additional odds (2024/25) from The Odds API and writes `Data/UFC_betting_odds_enriched.csv`. Improved missing-odds coverage: 2024 missing f1/f2 ≈ 5–6%, 2025 ≈ 7–8%.
 - `backtest_betting.py`: Simple ROI backtest on 2024/25 winner bets with several staking rules. Flat EV-positive staking yields ~24–25% ROI on hold-out. Kelly variants are illustrative only; use caps for realism.
 

@@ -10,16 +10,7 @@ import pandas as pd
 from sklearn.impute import SimpleImputer
 from sklearn.metrics import accuracy_score
 from sklearn.pipeline import make_pipeline
-
-try:
-    from xgboost import XGBClassifier
-
-    _HAS_XGB = True
-except ImportError:  # pragma: no cover
-    _HAS_XGB = False
-    from sklearn.ensemble import HistGradientBoostingClassifier
-
-    XGBClassifier = None  # type: ignore
+from xgboost import XGBClassifier
 
 from train_fightiq_model import HOLDOUT_YEARS, _build_full_dataset
 
@@ -36,34 +27,27 @@ def method_bucket(res: str) -> str:
 
 
 def build_targets(wide: pd.DataFrame) -> Tuple[pd.Series, pd.Series, pd.Series, pd.Series]:
-    y_win = wide["label"]
-    y_method = wide["result"].apply(method_bucket)
+    y_win = wide["label"].fillna(-1).astype(int)
+    y_method = wide["result"].apply(method_bucket).fillna("OTHER")
     y_round = pd.to_numeric(wide["finish_round"], errors="coerce").fillna(-1).astype(int).astype(str)
     trifecta = y_win.astype(str) + "_" + y_method + "_" + y_round
     return y_win, y_method, y_round, trifecta
 
 
 def make_model(num_class: int = 2):
-    if _HAS_XGB:
-        params = dict(
-            n_estimators=700,
-            learning_rate=0.05,
-            max_depth=4,
-            subsample=0.9,
-            colsample_bytree=0.8,
-            tree_method="hist",
-            reg_lambda=1.0,
-            gamma=0.05,
-        )
-        if num_class > 2:
-            params["objective"] = "multi:softprob"
-            params["num_class"] = num_class
-            params["eval_metric"] = "mlogloss"
-        else:
-            params["eval_metric"] = "logloss"
-        model = XGBClassifier(**params)
-    else:  # pragma: no cover
-        model = HistGradientBoostingClassifier(max_iter=400, learning_rate=0.08, max_depth=6)
+    model = XGBClassifier(
+        n_estimators=200,
+        learning_rate=0.08,
+        max_depth=3,
+        subsample=0.9,
+        colsample_bytree=0.8,
+        tree_method="hist",
+        reg_lambda=1.0,
+        gamma=0.05,
+        objective="multi:softprob" if num_class > 2 else "binary:logistic",
+        num_class=num_class if num_class > 2 else None,
+        eval_metric="mlogloss" if num_class > 2 else "logloss",
+    )
     return make_pipeline(SimpleImputer(strategy="median"), model)
 
 
@@ -92,6 +76,19 @@ def main():
     years = wide["event_date"].dt.year
     train_mask = ~years.isin(HOLDOUT_YEARS)
     test_mask = years.isin(HOLDOUT_YEARS)
+
+    # downsample train for faster sanity metrics
+    train_idx = np.where(train_mask)[0]
+    if len(train_idx) > 2500:
+        rng = np.random.default_rng(0)
+        keep = set(rng.choice(train_idx, size=2500, replace=False))
+        mask_array = np.array([i in keep for i in range(len(wide))])
+        train_mask = mask_array
+
+    # bucket rare trifecta classes to avoid unseen-test mapping issues
+    train_counts = y_trifecta[train_mask].value_counts()
+    keep_classes = set(train_counts[train_counts >= 20].index)
+    y_trifecta = y_trifecta.where(y_trifecta.isin(keep_classes), "OTHER_TRIFECTA")
 
     splits = {
         "winner": y_win,
